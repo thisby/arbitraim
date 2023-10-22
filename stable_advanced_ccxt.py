@@ -3,20 +3,17 @@
 import datetime
 import json
 from tinydb import TinyDB, Query
-from pynput.keyboard import Key, Listener
 import time
 import pandas as pd
 import smtplib
 from email.mime.text import MIMEText
 from email.mime.multipart import MIMEMultipart
 import os
-import rel
 import sys
 from dateutil import tz 
 root = os.path.dirname(os.path.dirname(os.path.dirname(os.path.abspath(__file__))))
 sys.path.append(root + '/python')
 sys.path.append(sys.path[0] + '/class')
-import asyncio
 import websocket
 from pybit.unified_trading import HTTP,WebSocket
 from Mail_Subject import Mail_Subject
