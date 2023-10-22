@@ -1,3 +1,5 @@
+#!/usr/bin/env python
+# -*- coding: utf-8 -*- 
 import datetime
 import json
 from tinydb import TinyDB, Query
