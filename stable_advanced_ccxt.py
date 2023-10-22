@@ -57,7 +57,7 @@ def send_email(mail_subject):
         text = msg.as_string()
         server.sendmail(smtp_username, msg['To'], text)
         server.quit()
-        print(f'{mail_subject.name} - E-mail envoyé avec succès.')
+        print(f"{mail_subject.name} - E-mail envoyé avec succès.")
     except Exception as e:
         print('Erreur lors de l\'envoi de l\'e-mail :', str(e))
         print(e.__traceback__.tb_lineno)
