@@ -2,7 +2,6 @@
 # -*- coding: utf-8 -*- 
 import datetime
 import json
-import math
 from tinydb import TinyDB, Query
 import time
 import pandas as pd
@@ -20,8 +19,7 @@ from pybit.unified_trading import HTTP,WebSocket
 from Mail_Subject import Mail_Subject
 from Reference import Reference
 from Position import Position
-from Timer import Timer
-import threading
+
 
 # A editer
 # compte principal
@@ -58,8 +56,8 @@ def send_email(mail_subject):
         server.quit()
         print(f"{mail_subject.name} - E-mail envoyé avec succès.")
     except Exception as e:
-        print(('Erreur lors de l\'envoi de l\'e-mail :', str(e)))
-        print(str(e.__traceback__.tb_lineno))
+        print('Erreur lors de l\'envoi de l\'e-mail :', str(e))
+        print(e.__traceback__.tb_lineno)
 
 class Strategy():
 
@@ -104,7 +102,7 @@ class Strategy():
             )
             return float(assets['result']['balance']['walletBalance'])
         except Exception as e:
-            print((str(e)))
+            print(str(e))
 
     def get_wallet_balance(self):
         global session
@@ -113,259 +111,137 @@ class Strategy():
             self.balance = balance["totalEquity"]
             return balance
         except Exception as e:
-            print((str(e)))
+            print(str(e))
 
-    def manage_cancellation(self,canceled):
-        global last_entry_price,last_exit_price,row
-        orderId = canceled['result']['orderId']
-        order = session.get_order_history(
-            category="spot",
-            limit=1,                        
-            orderId=orderId,
-            symbol=self.instrument
-        )
-        stats = order['result']['list'][0]
-        status = stats['orderStatus']
-        isFilled = status == 'Filled'
-        isCanceled = False
-        if not isFilled:
-            while not isCanceled:
-                canceled = session.cancel_order(
-                    category="spot",
-                    orderId=orderId,
-                    symbol=self.instrument
-                )
-                isCanceled = True
-                status = canceled["retCode"]
-                if status == 0:
-                    isCanceled = True
+
+    def process(self,position):
+        global last_entry_price,last_exit_price,low,sum,dataframe,session,row,trades,buy_counter,sell_counter
+        # dataframe = self.dataframe_init()
+        ref = self.ref
+        buy_variation_dump = self.buy_variation_dump
+        buy_variation_pump = self.buy_variation_pump
+
+        e = 0
+
+        e = self.switch_price_reference(ref, position.open, position.high, position.low, position.close)
         
-        if isCanceled:
-            row.update({'status':'Cancelled'})
+        if low == 0:
+            low = position.low
 
-        if isFilled:
+        self.manage_alerts(position, buy_variation_dump, buy_variation_pump)
+
+        position.shares = self.get_balance(base)
+        # d = self.get_wallet_balance()
+        self.balance = self.get_balance(quote)
+
+        if position.shares is not None and position.shares > MIN_SHARES_REQUIRED:
+            if last_entry_price == 0:
+                #get the last price in db
+                Trade = Query()
+                all = self.trades.search(Trade.type == "B")
+                if len(all) > 0:
+                    doc = all[-1]
+                    last_entry_price = doc["entry_price"]
+
+            if last_entry_price == 0:
+                #try to get the last entry with bybit request
+                orders = session.get_order_history(
+                    category="spot",
+                    limit=50, 
+                    orderStatus="Filled"
+                    # symbol=base                       
+                )
+                filtered = filter(lambda x:x["side"] == "Buy",orders['result']['list'])
+                l = list(filtered)
+                stats = {"avgPrice":"","symbol":instrument}
+                if (len(l) > 0):
+                    stats = l[0]                 
+                
+
+                if stats['symbol'] == instrument:                        
+                    avgPrice = stats['avgPrice']
+                    # status = stats['orderStatus']
+                    if avgPrice not in ("",0,'0'):
+                        avgPrice = float(avgPrice)
+                        # insert last buy trade in db
+                    else:
+                        avgPrice = position.low
+                    last_entry_price = avgPrice
+                    if last_exit_price == 0:
+                        last_exit_price = avgPrice + self.pips
+            else:
+                last_exit_price = last_entry_price+self.pips
+
+            result = self.exit_position( position)
+            orderId = result['result']['orderId']
             order = session.get_order_history(
                 category="spot",
                 limit=1,                        
-                orderId=orderId,
-                symbol=self.instrument
+                orderId=orderId
             )
             stats = order['result']['list'][0]
-
             avgPrice = stats['avgPrice']
             status = stats['orderStatus']
             shares = float(stats['qty'])
             row.update({"orderId":orderId})
-
 
             if avgPrice != "" and status != "Cancelled":
                 avgPrice = float(avgPrice)
                 last_entry_price = avgPrice
                 last_exit_price = avgPrice + self.pips
                 row.update({"status":'filled'})
-                row.update({"shares":shares})
-            
-        return row['status']
+                sell_counter = 0
+                cost = last_entry_price*shares                
+                earn = last_exit_price*shares
+                sum += earn - cost
+                if sum < -10:
+                   send_email(Mail_Subject.NEGATIVE_GAIN)
+                   exit()
 
-    def process(self,position):
-        try:
-            global last_entry_price,last_exit_price,low,sum,dataframe,session,row,trades,buy_counter,sell_counter,entry_price
-            # dataframe = self.dataframe_init()
-            ref = self.ref
-            buy_variation_dump = self.buy_variation_dump
-            buy_variation_pump = self.buy_variation_pump
 
-            entry_price = 0
-
-            entry_price = self.switch_price_reference(ref, position.open, position.high, position.low, position.close)
-            
-            if low == 0:
-                low = position.low
-
-            self.manage_alerts(position, buy_variation_dump, buy_variation_pump)
-
-            position.shares = self.get_balance(base)
-            # d = self.get_wallet_balance()
-            self.balance = self.get_balance(quote)
-
-            if position.shares is not None and position.shares > MIN_SHARES_REQUIRED:
-                if last_entry_price == 0:
-                    #get the last price in db
-                    Trade = Query()
-                    all = self.trades.search(Trade.type == "B")
-                    if len(all) > 0:
-                        doc = all[-1]
-                        last_entry_price = doc["entry_price"]
-
-                if last_entry_price == 0:
-                    #try to get the last entry with bybit request
-                    orders = session.get_order_history(
-                        category="spot",
-                        limit=50, 
-                        orderStatus="Filled"
-                        # symbol=base                       
-                    )
-                    filtered = [x for x in orders['result']['list'] if x["side"] == "Buy"]
-                    l = list(filtered)
-                    stats = {"avgPrice":"","symbol":instrument}
-                    if (len(l) > 0):
-                        stats = l[0]                 
-                    
-
-                    if stats['symbol'] == instrument:                        
-                        avgPrice = stats['avgPrice']
-                        shares = float(stats['qty'])
-                        # status = stats['orderStatus']
-                        if avgPrice not in ("",0,'0'):
-                            avgPrice = float(avgPrice)
-                            # insert last buy trade in db
-                            row.update({"details":"dernier achat récupéré via api"})
-                            row.update({"open":position.open})
-                            row.update({"high":position.high})
-                            row.update({"low":position.low})
-                            row.update({"close":position.close})
-                            row.update({"entry_price":entry_price})
-                            row.update({"entry_date":position.date.strftime("%Y-%m-%d %H:%M:%S")})
-                            row.update({"exit_price":entry_price+self.pips})
-                            row.update({"shares":shares})
-                            row.update({"type":"B"})
-                            self.trades.insert(row)
-                        else:
-                            avgPrice = position.low
-                        last_entry_price = avgPrice
-                        if last_exit_price == 0:
-                            last_exit_price = avgPrice + self.pips
-                else:
-                    last_exit_price = last_entry_price+self.pips
-
-                canceled = self.exit_position( position)
-                status = self.manage_cancellation(canceled)
-                '''
-                orderId = canceled['result']['orderId']
-                order = session.get_order_history(
-                    category="spot",
-                    limit=1,                        
-                    orderId=orderId,
-                    symbol=self.instrument
-                )
-                stats = order['result']['list'][0]
-                status = stats['orderStatus']
-                isFilled = status == 'Filled'
-                isCanceled = False
-                if not isFilled:
-                    while not isCanceled:
-                        canceled = session.cancel_order(
-                            category="spot",
-                            orderId=orderId,
-                            symbol=self.instrument
-                        )
-                        isCanceled = True
-                        status = canceled["retCode"]
-                        if status == 0:
-                            isCanceled = True
-                
-                if isFilled:
-                    order = session.get_order_history(
-                        category="spot",
-                        limit=1,                        
-                        orderId=orderId,
-                        symbol=self.instrument
-                    )
-                    stats = order['result']['list'][0]
-
-                    avgPrice = stats['avgPrice']
-                    status = stats['orderStatus']
-                    shares = float(stats['qty'])
-                    row.update({"orderId":orderId})
-                    
-
-                    if avgPrice != "" and status != "Cancelled":
-                        avgPrice = float(avgPrice)
-                        last_entry_price = avgPrice
-                        last_exit_price = avgPrice + self.pips
-                        row.update({"status":'filled'})
-                '''
-                
-                if status == 'Filled':
-                    shares = row['shares']
+            else:
+                row.update({"status":'cancelled'})
+                sell_counter += 1
+                if sell_counter > self.max_sell_wait:
                     sell_counter = 0
-                    cost = last_entry_price*shares                
-                    earn = last_exit_price*shares
-                    sum += earn - cost
-                    if sum < -10:
-                        send_email(Mail_Subject.NEGATIVE_GAIN)
-                        exit()
-                else:
-                    sell_counter += 1
-                    if sell_counter > self.max_sell_wait:
-                        sell_counter = 0
-                        low = position.low
-                        last_exit_price = low if MODE == 1 else last_entry_price
-                        last_entry_price = last_exit_price-self.pips
+                    low = position.low
+                    last_exit_price = low if MODE == 1 else last_entry_price
+                    last_entry_price = last_exit_price-self.pips
+            self.trades.insert(row)        
+            trades.append(row) 
+            row = {}  
 
+        else:        
+            result = self.entry_position( position.date, position.open, position.low, position.volume, e)
+            orderId = result['result']['orderId']
+            order = session.get_order_history(
+                category="spot",
+                limit=1,                        
+                orderId=orderId
+            )
+            
+            stats = order['result']['list'][0]
+            avgPrice = stats['avgPrice']
+            status = stats['orderStatus']
+            row.update({"orderId":orderId})
 
-                self.trades.insert(row)        
-                trades.append(row) 
-                row = {}  
+            if avgPrice != "" and status != "Cancelled":
+                avgPrice = float(avgPrice)
+                last_entry_price = avgPrice
+                last_exit_price = avgPrice + self.pips
+                row.update({"status":'filled'})
+                buy_counter = 0
+            else:
+                row.update({"status":'cancelled'})
+                buy_counter += 1
+                if buy_counter > self.max_buy_wait:
+                    buy_counter = 0
+                    low = position.low
 
-            else:        
-                canceled = self.entry_position( position)
-                orderId = canceled['result']['orderId']
-                order = session.get_order_history(
-                    category="spot",
-                    limit=1,                        
-                    orderId=orderId,
-                    symbol=self.instrument
-                )
-                stats = order['result']['list'][0]
-                status = stats['orderStatus']
-                isFilled = status == 'Filled'
-                isCanceled = False
-                if not isFilled:
-                    while not isCanceled:
-                        canceled = session.cancel_order(
-                            category="spot",
-                            orderId=orderId,
-                            symbol=self.instrument
-                        )
-                        isCanceled = True
-                        status = canceled["retCode"]
-                        if status == 0:
-                            isCanceled = True
-                
-                if isFilled:
-                    order = session.get_order_history(
-                        category="spot",
-                        limit=1,                        
-                        orderId=orderId,
-                        symbol=self.instrument
-                    )
-                    
-                    stats = order['result']['list'][0]
-                    avgPrice = stats['avgPrice']
-                    status = stats['orderStatus']
-                    row.update({"orderId":orderId})
+            trades.append(row)     
+            row = {}    
 
-                    if avgPrice != "" and status != "Cancelled":
-                        avgPrice = float(avgPrice)
-                        last_entry_price = avgPrice
-                        last_exit_price = avgPrice + self.pips
-                        row.update({"status":'filled'})
-                        buy_counter = 0
-                else:
-                    row.update({"status":'cancelled'})
-                    buy_counter += 1
-                    if buy_counter > self.max_buy_wait:
-                        buy_counter = 0
-                        low = position.low
-
-                trades.append(row)     
-                row = {}    
-
-            return sum 
-        except Exception as ex:
-            print(str(ex))
-            print(str(ex.__traceback__.tb_lineno))
+        return sum 
 
     def manage_alerts(self, position, buy_variation_dump, buy_variation_pump):
         if last_entry_price > 0 and position.open < (last_entry_price * (1- (buy_variation_dump/100))):          
@@ -411,53 +287,53 @@ class Strategy():
             e = (o+c)/2
         return e
 
-    def entry_position(self, position):
-        global buy_counter,last_entry_price,last_exit_price,sum,dataframe,low,row,entry_price
+    def entry_position(self, d, o, l, v, e):
+        global buy_counter,last_entry_price,last_exit_price,sum,dataframe,low,row
+        entry_price = e
+        # if e == low:
         self.balance = self.get_balance('USDT')
-        shares = (self.balance + sum) / entry_price
-        if not self.checkVolume or position.volume >= shares:
-            details = f"ACHAT a {position.open} sur la bougie du {position.date}"
+        shares = (self.balance + sum) / e
+        if not self.checkVolume or v >= shares:
+            details = f"ACHAT a {o} sur la bougie du {d}"
+            # dataframe.astype({"entry_price":float})
             
             def add_entry(e,d,shares):
+                # '''
+                # '''
+                # shares = str(10)
                 try:
                     result = session.place_order(category="spot",
                     symbol=self.instrument,
                     side="Buy",
                     orderType="Limit",
                     qty=self.round_down(shares,2),
-                    price=entry_price,
-                    timeInForce="GTC",
+                    price=l,
+                    timeInForce="IOC",
                     # orderLinkId="spot-test-postonly",
                     isLeverage=0,
                     orderFilter="Order") 
 
-                except Exception as ex:
-                    print((str(ex)))
-                    print(str(ex.__traceback__.tb_lineno))
+                except Exception as e:
+                    print(str(e))
+                    print(e.__traceback__.tb_lineno)
                 
                 row.update({"details":details})
-                row.update({"open":position.open})
-                row.update({"high":position.high})
-                row.update({"low":position.low})
-                row.update({"close":position.close})
-                row.update({"entry_price":entry_price})
+                row.update({"entry_price":e})
                 row.update({"entry_date":d.strftime("%Y-%m-%d %H:%M:%S")})
-                row.update({"exit_price":entry_price+self.pips})
+                row.update({"exit_price":e+self.pips})
                 row.update({"shares":shares})
                 row.update({"type":"B"})
                 
-                time.sleep(10)
-
                 return result
             try:
-                result = add_entry(entry_price,position.date,shares)
+                result = add_entry(entry_price,d,shares)
 
-            except Exception as ex:
-                print((str(ex)))
-                print(str(ex.__traceback__.tb_lineno))
+            except Exception as e:
+                print(str(e))
+                print(e.__traceback__.tb_lineno)
 
-            last_entry_price = position.low
-            last_exit_price = position.low+self.pips
+            last_entry_price = l
+            last_exit_price = l+self.pips
             return result
         else:
             row.update({"details":f"Pas assez de volume pour acheter"})
@@ -472,8 +348,8 @@ class Strategy():
             d = position.date
             o = position.open
         except Exception as e:
-            print((str(e)))
-            print(str(e.__traceback__.tb_lineno))
+            print(str(e))
+            print(e.__traceback__.tb_lineno)
 
         # if o == x:
         s = position.get("shares")
@@ -486,33 +362,27 @@ class Strategy():
                     orderType="Limit",
                     qty=self.round_down(s,6),
                     price=x,
-                    timeInForce="GTC",
+                    timeInForce="IOC",
                     isLeverage=0,
                     orderFilter="Order") 
 
                 except Exception as e:
-                    print((str(e)))
-                    print(str(e.__traceback__.tb_lineno))
+                    print(str(e))
+                    print(e.__traceback__.tb_lineno)
 
                 row.update({"details":f"VENTE a {x} sur la bougie du {d}"})
-                row.update({"open":position.open})
-                row.update({"high":position.high})
-                row.update({"low":position.low})
-                row.update({"close":position.close})
                 row.update({"exit_date":d.strftime("%Y-%m-%d %H:%M:%S")})
                 row.update({"exit_price":x})
                 row.update({"shares":s})
                 row.update({"type":"S"})
                 row.update({"balance":sum})
 
-                time.sleep(10)
-
                 return result
             try:
                 result = add_exit(o)
             except Exception as e:
-                print((str(e)))
-                print(str(e.__traceback__.tb_lineno))
+                print(str(e))
+                print(e.__traceback__.tb_lineno)
             
                     # if (earn < cost): print(balance+oldsum,balance+sum)
 
@@ -532,9 +402,9 @@ class Strategy():
         return result      
 
     def show(self,sum):
-        print((self.balance + sum))
-        print((self.avgVolume))
-        print((str((sum/self.balance) * 100),'%'))
+        print(self.balance + sum)
+        print(self.avgVolume)
+        print(str((sum/self.balance) * 100),'%')
 
     def dataframe_init(self):
         self.trades = TinyDB('trades.json')
@@ -568,7 +438,7 @@ class Strategy():
         if '.' in s:
             c = s.split('.')
             l = len(c[1])
-            if l >= n+1:
+            if l > n+1:
                 d=c[1][:n+1]
                 e = d[:-1] + "0"
                 return float(c[0] + "." + e)
@@ -712,14 +582,11 @@ api_secret="L2kGWggYMgh0mcHzaqc34Nz9cGvzwTuIrNnu"
 
 
 
-s = Strategy(1000,1,90,90,Reference.LOW,10,10,10,10,instrument)
-timer = Timer()
+s = Strategy(1000,1,900,900,Reference.LOW,10,10,10,10,instrument)
 
 
 def handle_message_bybit(message):
     handle_message(ws,message)
-    
-
 
 def handle_message_backtest(m):
     message = json.loads(m)
@@ -737,7 +604,6 @@ def handle_message(ws,message):
     position = Position(d,o,h,c,l,v)
     s.process(position)
     end = time.time() 
-    time.sleep(20)
     # s.dataframe_persist()
     # s.show(sum)
     # print(message)
@@ -761,12 +627,6 @@ def on_open(ws):
 def on_data(ws,data):
     print(data)
 
-def run_kline():
-    ws.kline_stream(
-            interval=1,
-            symbol=instrument,
-            callback=handle_message_bybit)
-
 try:
     websocket.enableTrace(True)
     if (not DEBUG):
@@ -774,18 +634,20 @@ try:
         channel_type="spot",
         testnet=False,
         api_key="tOkx1lElyxcjnegbFw",
-        api_secret="i9qYG3cVycnZCAWdBR0WVa6FcZlYvsnzpicP",
-
+        api_secret="i9qYG3cVycnZCAWdBR0WVa6FcZlYvsnzpicP"
        )
-        run_kline()
+        ws.kline_stream(
+            interval=1,
+            symbol=instrument,
+            callback=handle_message_bybit
+        )
     else:    
         ws = websocket.WebSocketApp("ws://localhost:8765", on_message=handle_message_backtest)
         ws.run_forever() 
 
-
 except Exception as e:
-    print((str(e)))
-    print(str(e.__traceback__.tb_lineno))
+    print(str(e))
+    print(e.__traceback__.tb_lineno)
 
 end = time.time()
 begin = time.time()
