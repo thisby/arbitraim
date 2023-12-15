@@ -25,6 +25,7 @@ import threading
 
 # A editer
 # compte principal
+takeLow = False
 api_key="tOkx1lElyxcjnegbFw",
 api_secret="i9qYG3cVycnZCAWdBR0WVa6FcZlYvsnzpicP",
 # compte trading
@@ -34,10 +35,11 @@ base = "USDC"
 pips = 1/10000
 MIN_SHARES_REQUIRED = 9
 MAX_RUNNING_TIME = 300
+MIN_AS_SECOND = 60
 DEBUG = not True
 MODE = 0 # 1 for cool mode (low price selling), 0 for aggressive (entry price selling)
 # Fin
-
+ohlcv = pd.DataFrame(columns=["date","Open","High","Low","Close","Volume"])
 
 
 def send_email(mail_subject):
@@ -89,11 +91,17 @@ class Strategy():
         self.checkVolume = False
         self.pips = pips
         self.instrument = i
-        self.max_sell_wait = msw
-        self.max_buy_wait = mbw
+        self.max_try_to_sell = msw
+        self.max_try_to_buy = mbw
+        
+        self.max_wait_sell = 30
+        self.max_wait_buy = 30
+
         self.runDate = datetime.datetime.now()
         self.avgVolume = 0
-        self.dataframe = self.dataframe_init()
+        self.df_trades = self.persistence_init()
+        self.clean_trades()
+
 
     def get_balance(self,token):
         global session
@@ -115,9 +123,9 @@ class Strategy():
         except Exception as e:
             print((str(e)))
 
-    def manage_cancellation(self,canceled):
-        global last_entry_price,last_exit_price,row
-        orderId = canceled['result']['orderId']
+
+    def manage_status(self,orderResult):
+        orderId = orderResult['result']['orderId']
         order = session.get_order_history(
             category="spot",
             limit=1,                        
@@ -126,46 +134,91 @@ class Strategy():
         )
         stats = order['result']['list'][0]
         status = stats['orderStatus']
-        isFilled = status == 'Filled'
-        isCanceled = False
-        if not isFilled:
-            while not isCanceled:
-                canceled = session.cancel_order(
-                    category="spot",
-                    orderId=orderId,
-                    symbol=self.instrument
-                )
-                isCanceled = True
-                status = canceled["retCode"]
-                if status == 0:
-                    isCanceled = True
-        
-        if isCanceled:
-            row.update({'status':'Cancelled'})
+        return status
 
-        if isFilled:
-            order = session.get_order_history(
+    def cancel_order(self,orderId):
+        global row
+        isCanceled = False
+        while not isCanceled:   # on boucle jusqu'a annuler l'ordre
+            orderResult = session.cancel_order(
                 category="spot",
-                limit=1,                        
                 orderId=orderId,
                 symbol=self.instrument
             )
-            stats = order['result']['list'][0]
+            isCanceled = True
+            status = orderResult["retCode"]
+            if status == 0:
+                status = 'Cancelled'
+                isCanceled = True
+    
+        if isCanceled:
+            row.update({'status':status})        
 
-            avgPrice = stats['avgPrice']
-            status = stats['orderStatus']
-            shares = float(stats['qty'])
-            row.update({"orderId":orderId})
+    def manage_order(self,orderResult,isIOT = False):
+        global last_entry_price,last_exit_price,row
+        try:
+            orderId = orderResult['result']['orderId']
+            status = self.manage_status(orderResult)
+            isFilled = status == 'Filled'
+            isCanceled = False
+            timeout = 0
+            if not isFilled: # l'ordre n'est pas rempli
+                if (not isIOT):# si on attends une annulation d'ordre
+                    while (timeout <= (self.max_wait_buy * MIN_AS_SECOND)): # tant qu'on doit boucler
+                        time.sleep(1)
+                        timeout += 1
+                        status = self.manage_status(orderResult)
+                        if (status == 'Filled'):
+                            break
+                
+                if status != 'Filled' or isIOT:
+                    self.cancel_order(orderId)
+
+            if status == 'Filled':
+                order = session.get_order_history(
+                    category="spot",
+                    limit=1,                        
+                    orderId=orderId,
+                    symbol=self.instrument
+                )
+                stats = order['result']['list'][0]
+
+                avgPrice = stats['avgPrice']
+                status = stats['orderStatus']
+                shares = float(stats['qty'])
+                row.update({"orderId":orderId})
 
 
-            if avgPrice != "" and status != "Cancelled":
-                avgPrice = float(avgPrice)
-                last_entry_price = avgPrice
-                last_exit_price = avgPrice + self.pips
-                row.update({"status":'filled'})
-                row.update({"shares":shares})
-            
-        return row['status']
+                if avgPrice != "" and status != "Cancelled":
+                    avgPrice = float(avgPrice)
+                    last_entry_price = avgPrice
+                    last_exit_price = avgPrice + self.pips
+                    row.update({"status":'Filled'})
+                    row.update({"shares":shares})
+                
+            return [row['status'],orderId]
+        
+        except Exception as ex:
+                print((str(ex)))
+                print(str(ex.__traceback__.tb_lineno))
+
+    def clean_trades(self):
+        Trade = Query()
+        entries = self.js_trades.search(Trade.type == "B" and Trade.status == 'Filled')
+        removed_docs_id = []
+        kept_docs = []
+        removed_docs = []
+        if len(entries) > 0:
+            entry = entries[0]
+            doc_id = entry.doc_id+1
+            exit = self.js_trades.get(doc_id=doc_id)
+            kept_docs.append(entry.doc_id)
+            kept_docs.append(exit.doc_id)        
+            for e in self.js_trades:
+                if e.doc_id not in kept_docs:
+                    self.js_trades.remove(doc_ids = [e.doc_id])
+            return exit
+        
 
     def process(self,position):
         try:
@@ -179,6 +232,10 @@ class Strategy():
 
             entry_price = self.switch_price_reference(ref, position.open, position.high, position.low, position.close)
             
+
+            if takeLow:
+                entry_price -= self.pips
+
             if low == 0:
                 low = position.low
 
@@ -192,7 +249,7 @@ class Strategy():
                 if last_entry_price == 0:
                     #get the last price in db
                     Trade = Query()
-                    all = self.trades.search(Trade.type == "B")
+                    all = self.js_trades.search(Trade.type == "B")
                     if len(all) > 0:
                         doc = all[-1]
                         last_entry_price = doc["entry_price"]
@@ -229,62 +286,17 @@ class Strategy():
                             row.update({"exit_price":entry_price+self.pips})
                             row.update({"shares":shares})
                             row.update({"type":"B"})
-                            self.trades.insert(row)
+                            row.update({"status":"Filled"})
+                            self.js_trades.insert(row)
                         else:
-                            avgPrice = position.low
+                            avgPrice = position.low if MODE == 1 else position.open
                         last_entry_price = avgPrice
                         if last_exit_price == 0:
                             last_exit_price = avgPrice + self.pips
                 else:
                     last_exit_price = last_entry_price+self.pips
 
-                canceled = self.exit_position( position)
-                status = self.manage_cancellation(canceled)
-                '''
-                orderId = canceled['result']['orderId']
-                order = session.get_order_history(
-                    category="spot",
-                    limit=1,                        
-                    orderId=orderId,
-                    symbol=self.instrument
-                )
-                stats = order['result']['list'][0]
-                status = stats['orderStatus']
-                isFilled = status == 'Filled'
-                isCanceled = False
-                if not isFilled:
-                    while not isCanceled:
-                        canceled = session.cancel_order(
-                            category="spot",
-                            orderId=orderId,
-                            symbol=self.instrument
-                        )
-                        isCanceled = True
-                        status = canceled["retCode"]
-                        if status == 0:
-                            isCanceled = True
-                
-                if isFilled:
-                    order = session.get_order_history(
-                        category="spot",
-                        limit=1,                        
-                        orderId=orderId,
-                        symbol=self.instrument
-                    )
-                    stats = order['result']['list'][0]
-
-                    avgPrice = stats['avgPrice']
-                    status = stats['orderStatus']
-                    shares = float(stats['qty'])
-                    row.update({"orderId":orderId})
-                    
-
-                    if avgPrice != "" and status != "Cancelled":
-                        avgPrice = float(avgPrice)
-                        last_entry_price = avgPrice
-                        last_exit_price = avgPrice + self.pips
-                        row.update({"status":'filled'})
-                '''
+                [status,orderId] = self.exit_position( position)
                 
                 if status == 'Filled':
                     shares = row['shares']
@@ -297,42 +309,20 @@ class Strategy():
                         exit()
                 else:
                     sell_counter += 1
-                    if sell_counter > self.max_sell_wait:
+                    if sell_counter > self.max_try_to_sell:
                         sell_counter = 0
                         low = position.low
                         last_exit_price = low if MODE == 1 else last_entry_price
                         last_entry_price = last_exit_price-self.pips
 
 
-                self.trades.insert(row)        
+                self.js_trades.insert(row)        
                 trades.append(row) 
                 row = {}  
 
             else:        
-                canceled = self.entry_position( position)
-                orderId = canceled['result']['orderId']
-                order = session.get_order_history(
-                    category="spot",
-                    limit=1,                        
-                    orderId=orderId,
-                    symbol=self.instrument
-                )
-                stats = order['result']['list'][0]
-                status = stats['orderStatus']
+                [status,orderId] = self.entry_position( position)
                 isFilled = status == 'Filled'
-                isCanceled = False
-                if not isFilled:
-                    while not isCanceled:
-                        canceled = session.cancel_order(
-                            category="spot",
-                            orderId=orderId,
-                            symbol=self.instrument
-                        )
-                        isCanceled = True
-                        status = canceled["retCode"]
-                        if status == 0:
-                            isCanceled = True
-                
                 if isFilled:
                     order = session.get_order_history(
                         category="spot",
@@ -353,9 +343,9 @@ class Strategy():
                         row.update({"status":'filled'})
                         buy_counter = 0
                 else:
-                    row.update({"status":'cancelled'})
+                    row.update({"status":'Cancelled'})
                     buy_counter += 1
-                    if buy_counter > self.max_buy_wait:
+                    if buy_counter > self.max_try_to_buy:
                         buy_counter = 0
                         low = position.low
 
@@ -417,7 +407,7 @@ class Strategy():
         shares = (self.balance + sum) / entry_price
         if not self.checkVolume or position.volume >= shares:
             details = f"ACHAT a {position.open} sur la bougie du {position.date}"
-            
+            result = {}
             def add_entry(e,d,shares):
                 try:
                     result = session.place_order(category="spot",
@@ -446,11 +436,10 @@ class Strategy():
                 row.update({"shares":shares})
                 row.update({"type":"B"})
                 
-                time.sleep(10)
-
                 return result
             try:
                 result = add_entry(entry_price,position.date,shares)
+                [status,orderId] = self.manage_order(result)
 
             except Exception as ex:
                 print((str(ex)))
@@ -458,10 +447,11 @@ class Strategy():
 
             last_entry_price = position.low
             last_exit_price = position.low+self.pips
-            return result
+            return [status,orderId]
         else:
             row.update({"details":f"Pas assez de volume pour acheter"})
             buy_counter += 1
+            return ['','']
 
     def exit_position(self, position):
         global sell_counter,sum,last_entry_price,last_exit_price,row
@@ -479,6 +469,7 @@ class Strategy():
         s = position.get("shares")
         if not self.checkVolume or s<=self.avgVolume:
             def add_exit(o):
+                result = {}
                 try:
                     result = session.place_order(category="spot",
                     symbol=self.instrument,
@@ -494,6 +485,7 @@ class Strategy():
                     print((str(e)))
                     print(str(e.__traceback__.tb_lineno))
 
+
                 row.update({"details":f"VENTE a {x} sur la bougie du {d}"})
                 row.update({"open":position.open})
                 row.update({"high":position.high})
@@ -505,11 +497,13 @@ class Strategy():
                 row.update({"type":"S"})
                 row.update({"balance":sum})
 
-                time.sleep(10)
+                
 
                 return result
             try:
                 result = add_exit(o)
+                [status,orderId] = self.manage_order(result)
+
             except Exception as e:
                 print((str(e)))
                 print(str(e.__traceback__.tb_lineno))
@@ -529,24 +523,25 @@ class Strategy():
                 # self.dataframe_add("entry_date",d)
                 # self.dataframe_add("details",f"On passe bougie suivante")
 
-        return result      
+        return [status,orderId]      
 
     def show(self,sum):
         print((self.balance + sum))
         print((self.avgVolume))
         print((str((sum/self.balance) * 100),'%'))
 
-    def dataframe_init(self):
-        self.trades = TinyDB('trades.json')
+    def persistence_init(self):
+        self.js_trades = TinyDB('trades.json')
         self.first_use_case_date = self.first_use_case_date.strftime('%Y-%m-%d %H:%M:%S')
         return pd.DataFrame(columns=["date","Open","High","Low","Close","Volume","entry_date","entry_price","exit_price","shares","type","exit_date","details","balance"])
         
         # return self.dataframe
 
-    def dataframe_persist(self):
+    def trades_persist(self):
         global trades
-        self.dataframe = pd.DataFrame(trades)
-        self.dataframe.to_csv(f"Report[MAJ{self.runDate.strftime(DAY_FORMAT)}]_FILLED_2D.csv",decimal=',')
+        self.df_trades = pd.DataFrame(trades)
+        self.df_trades.to_csv(f"Report[MAJ{self.runDate.strftime(DAY_FORMAT)}]_FILLED_2D.csv",decimal=',')        
+
 
     def fill_position_from_array(self,position,arr):
         setattr(position,'date',arr[0])
@@ -700,7 +695,7 @@ line = session.get_kline(
     category="spot",
     symbol=instrument,
     interval=1,
-    start=low_time.timestamp() * 1000,
+    start=low_time.timestamp() * 1000
 )
 '''
 '''
@@ -712,7 +707,7 @@ api_secret="L2kGWggYMgh0mcHzaqc34Nz9cGvzwTuIrNnu"
 
 
 
-s = Strategy(1000,1,90,90,Reference.LOW,10,10,10,10,instrument)
+s = Strategy(1000,1,30,30,Reference.OPEN,10,10,10,10,instrument)
 timer = Timer()
 
 
@@ -734,6 +729,7 @@ def handle_message(ws,message):
     c = float(message['data'][0]['close'])
     v = float(message['data'][0]['volume'])
     row = {}
+    ohlcv[-1] = [d,o,h,l,c,v]    
     position = Position(d,o,h,c,l,v)
     s.process(position)
     end = time.time() 
@@ -794,7 +790,7 @@ while True:
 # elapsed < MAX_RUNNING_TIME:
     time.sleep(1)
     if s.passage % 30 == 0 and len(trades) > 0:
-        s.dataframe_persist()
+        s.trades_persist()
     s.passage += 1
     end = time.time()
     elapsed = end-begin
