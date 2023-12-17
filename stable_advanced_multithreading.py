@@ -49,7 +49,7 @@ session = HTTP(
     api_secret=api_secret,
 )
 
-s = Strategy(1000,1,0,0,Reference.OPEN,10,10,10,10,base,quote,session)
+s = Strategy(1000,1,3,3,Reference.OPEN,10,10,10,10,base,quote,session)
 timer = Timer()
 
 begin = time.time()
