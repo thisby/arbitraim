@@ -14,7 +14,7 @@ from mail import send_email
 
 
 pips = 1/10000
-takeLow = False
+takeLow = True
 api_key="tOkx1lElyxcjnegbFw",
 api_secret="i9qYG3cVycnZCAWdBR0WVa6FcZlYvsnzpicP",
 # compte trading
