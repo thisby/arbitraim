@@ -473,8 +473,8 @@ class Strategy():
                     symbol=self.instrument,
                     side="Buy",
                     orderType="Limit",
-                    qty=self.round_down(s,2),
-                    price=entry_price,
+                    qty=self.round_down(s,3),
+                    price=self.round_down(entry_price,6)
                     timeInForce="GTC",
                     # orderLinkId="spot-test-postonly",
                     isLeverage=0,
@@ -504,7 +504,7 @@ class Strategy():
             side="Sell",
             orderType="Limit",
             qty=self.round_down(s,6),
-            price=x,
+            price=self.round_down(x,6),
             timeInForce="GTC",
             isLeverage=0,
             orderFilter="Order") 
@@ -530,7 +530,7 @@ class Strategy():
         global sell_counter,sum,last_entry_price,last_exit_price,row
         global low
         try:
-            x = position.open if last_exit_price == 0 else last_exit_price
+            x = position.open if last_exit_price == 0 else self.round_down(last_exit_price,6)
             last_exit_price = x
             d = position.date
         except Exception as e:
