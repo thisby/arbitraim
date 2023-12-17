@@ -474,7 +474,7 @@ class Strategy():
                     side="Buy",
                     orderType="Limit",
                     qty=self.round_down(s,3),
-                    price=self.round_down(entry_price,6)
+                    price=self.round_down(entry_price,6),
                     timeInForce="GTC",
                     # orderLinkId="spot-test-postonly",
                     isLeverage=0,
