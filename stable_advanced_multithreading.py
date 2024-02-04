@@ -29,8 +29,8 @@ done = False
 api_key="tOkx1lElyxcjnegbFw",
 api_secret="i9qYG3cVycnZCAWdBR0WVa6FcZlYvsnzpicP",
 # compte trading
-api_key = "WMQ7ZAe2DIQNMjPoSE"
-api_secret = "Qe7lJGokH8OPphTI2EHkR54RXkOkPMIp1C4F"
+api_key = "1FiaRE830E7mHquuGD"
+api_secret = "Tgh3JJ1XmvMFF292VOEAmkZQsEp4JLiKbVEu"
 
 
 
@@ -49,7 +49,7 @@ session = HTTP(
     api_secret=api_secret,
 )
 
-s = Strategy(1000,1,3,3,Reference.OPEN,10,10,10,10,base,quote,session)
+s = Strategy(1000,1,15,3,Reference.OPEN,10,10,10,10,base,quote,session)
 timer = Timer()
 
 begin = time.time()
@@ -62,9 +62,5 @@ while consumer is None or s.done:
     consumer = threading.Thread(target=s.process)
     consumer.start()
     s.done = False
-    # time.sleep(18000)
-    if s.passage % 30 == 0 and len(s.trades) > 0:
-        s.trades_persist()
-    s.passage += 1
     end = time.time()
     elapsed = end-begin

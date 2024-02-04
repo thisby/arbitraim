@@ -24,12 +24,15 @@ def handle_message_backtest(m):
 def handle_message(ws,message):
     try:
         #websocket.dump("msg",message)
+        db.truncate()
         d = datetime.datetime.fromtimestamp(message['data'][0]['start']/1000)
+        print(d)
         o = float(message['data'][0]['open'])
         h = float(message['data'][0]['high'])
         l = float(message['data'][0]['low'])
         c = float(message['data'][0]['close'])
         v = float(message['data'][0]['volume'])
+        print(f"{o},{h},{l},{c},{v}")
         db.insert(message['data'][0])
 
     except Exception as ex:

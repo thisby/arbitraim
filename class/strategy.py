@@ -2,6 +2,7 @@ import asyncio
 import datetime
 import json
 import time
+from numpy import size
 import pandas as pd
 
 from tinydb import Query, TinyDB
@@ -11,10 +12,11 @@ from Mail_Subject import Mail_Subject
 from Position import Position
 from Reference import Reference
 from mail import send_email
-
+from termcolor import colored
 
 pips = 1/10000
-takeLow = True
+# take the low price
+takeLow = False
 api_key="tOkx1lElyxcjnegbFw",
 api_secret="i9qYG3cVycnZCAWdBR0WVa6FcZlYvsnzpicP",
 # compte trading
@@ -23,7 +25,7 @@ api_secret = "Qe7lJGokH8OPphTI2EHkR54RXkOkPMIp1C4F"
 MIN_SHARES_REQUIRED = 9
 MAX_RUNNING_TIME = 300
 MIN_AS_SECOND = 60
-MODE = 0 # 1 for cool mode (low price selling), 0 for aggressive (entry price selling)
+MODE = 0 # 0 for aggressive (entry price selling), 1 for cool mode (entry price minored 1 pips), 2 for middle (low price selling)
 # Fin
 
 buy_counter = 0
@@ -69,11 +71,11 @@ class Strategy():
         self.base = base
         self.quote = quote
         self.instrument = base + quote
-        self.max_try_to_sell = msw
-        self.max_try_to_buy = mbw
+        self.max_try_to_sell = msw * MIN_AS_SECOND
+        self.max_try_to_buy = mbw * MIN_AS_SECOND
         self.trades = []
         self.max_wait_sell = 30
-        self.max_wait_buy = 30
+        self.max_wait_buy = 15
 
         self.runDate = datetime.datetime.now()
         self.avgVolume = 0
@@ -102,7 +104,6 @@ class Strategy():
         except Exception as e:
             print((str(e)))
 
-
     def get_wallet_balance(self):
         try:
             balance = self.session.get_wallet_balance(accountType="UNIFIED")
@@ -110,7 +111,6 @@ class Strategy():
             return balance
         except Exception as e:
             print((str(e)))
-
 
     def manage_status(self,orderResult):
         orderId = orderResult['result']['orderId']
@@ -147,7 +147,7 @@ class Strategy():
         try:
             orderId = orderResult['result']['orderId']
             status = self.manage_status(orderResult)
-            isFilled = status == 'Filled'
+            isFilled = status in ('Filled','New')
             timeout = 0
             if not isFilled: # l'ordre n'est pas rempli
                 if (not isIOT):# si on attends une annulation d'ordre
@@ -161,22 +161,23 @@ class Strategy():
                 if status != 'Filled' or isIOT:
                     self.cancel_order(orderId)
 
-            if status == 'Filled':
-                order = self.session.get_order_history(
+            if isFilled:
+                order = self.session.get_open_orders(
                     category="spot",
                     limit=1,                        
                     orderId=orderId,
                     symbol=self.instrument
                 )
+                print(f"get order with {orderId}, {self.instrument}")
                 stats = order['result']['list'][0]
 
-                avgPrice = stats['avgPrice']
-                status = stats['orderStatus']
+                avgPrice = stats['price']
+                status = 'Filled'
+                row.update({"status":status})
                 shares = float(stats['qty'])
                 row.update({"orderId":orderId})
 
-
-                if avgPrice != "" and status != "Cancelled":
+                if avgPrice != "":
                     avgPrice = float(avgPrice)
                     last_entry_price = avgPrice
                     last_exit_price = avgPrice + self.pips
@@ -209,29 +210,60 @@ class Strategy():
         
 
     def process(self):
+        global MODE
+        last_exit_price = 0
+        last_entry_price = 0
         status = ""
         ohlcv = None
+        # take the last price in db
+        self.done = False
+        persistType = 'json'
         while True:
             if not self.done:
-                print('Process on last candle...')
-                persistType = 'tinyDB'
+                color = ""
+                if MODE == 0:
+                    color = "light_green"
+                elif MODE == 1:
+                    color = "light_yellow"
+                else:
+                    color = "red"
+
+                print(colored('Process on last candle...',color))
                 
-                if persistType == 'dataframe':
-                    j = ohlcv[-1].to_json()
-                    s = json.loads(j) 
-                    position = Position( datetime.datetime.fromtimestamp(s['0']/1000),float(s[1]),float(s[2]),float(s[3]),float(s[4]),float(s[5]))
+                if persistType == 'json':
+                    try:
+                        df = pd.read_json('ohlcv.json')
+                        if size(df) == 0:
+                            continue
+                        j = df.iloc[-1].to_json()
+                        # j = ohlcv.to_json()
+                        s = json.loads(j)['_default']
+                    except Exception as eX:
+                        exception = f"{eX.__traceback__.tb_lineno} {eX}"
+                        print(colored(exception,color))
+                        if 'Trailing' in exception:
+                            continue
+                        else:
+                            exit()
+
+                    position = Position( datetime.datetime.fromtimestamp(s['start']/1000),float(s['open']),float(s['high']),float(s['low']),float(s['close']),float(s['volume']))
+                    position.entry_price = last_entry_price
+                    position.exit_price = last_exit_price
+
                 elif persistType == "queue":
                     # s = queue.get()
                     position = Position(float(s[0]),float(s[1]),float(s[2]),float(s[3]),float(s[4]),float(s[5]))
                 elif persistType == "tinyDB":
+                    # self.ohlcv = TinyDB('ohlcv.json')
                     all = self.ohlcv.all()
                     if status == 'Filled' or ohlcv == None:
                         ohlcv = all[-1]
                     self.ohlcv.truncate()
                     position = Position(datetime.datetime.fromtimestamp(ohlcv['start']/1000),float(ohlcv['open']),float(ohlcv['high']),float(ohlcv['low']),float(ohlcv['close']),float(ohlcv['volume']))
+                    
 
                 try:
-                    global last_entry_price,last_exit_price,low,sum,dataframe,row,trades,buy_counter,sell_counter,entry_price
+                    global low,sum,dataframe,row,buy_counter,sell_counter,entry_price
                     # dataframe = self.dataframe_init()
                     ref = self.ref
                     buy_variation_dump = self.buy_variation_dump
@@ -239,8 +271,7 @@ class Strategy():
 
                     entry_price = 0
 
-                    entry_price = self.switch_price_reference(ref, position.open, position.high, position.low, position.close)
-                    
+                    entry_price = self.switch_price_reference(ref, position)
 
                     if takeLow:
                         entry_price -= self.pips
@@ -248,45 +279,38 @@ class Strategy():
                     if low == 0:
                         low = position.low
 
-                    self.manage_alerts(position, buy_variation_dump, buy_variation_pump)
+                    # self.manage_alerts(position, buy_variation_dump, buy_variation_pump)
 
                     position.shares = self.get_balance(self.base)
-                    # d = self.get_wallet_balance()
                     d = self.get_transfer_balance(self.base)
                     self.balance = self.get_balance(self.quote)
-                    
-                    print(f'last balance is {d}')
-                    orders = self.session.get_open_orders(category="spot")
 
+                    if d > 0:
+                        print(colored(f'last balance is {d}',color))
+                        print(colored(f"    Entry price set to {entry_price}",color))
+                        
+                    orders = self.session.get_open_orders(category="spot")
+                    order = None
+                    orderId = None
                     if (len(orders['result']['list']) > 0):
                         order = orders['result']['list'][-1]
-                        created = datetime.datetime.fromtimestamp(int(order['createdTime'])/1000)
+                        created = datetime.datetime.fromtimestamp(int(order['updatedTime'])/1000)
                         now = datetime.datetime.now()
                         elapsed = now - created
+                        orderId = order['orderId']
 
-                        '''
-                        if (len(orders['result']['list']) < 0):
-                            self.done = True
-                            return
-                        '''
-
-
-                        if(elapsed > datetime.timedelta(seconds=float(self.max_wait_buy * MIN_AS_SECOND))):
-                            print("Elapsed order...cancel order")
+                        if(elapsed > datetime.timedelta(seconds=float(2*self.max_wait_buy * MIN_AS_SECOND))):
+                            print(colored("Elapsed order...cancel order",color))
                             self.cancel_order(order['orderId'])
-                    
+                            continue
+                    else:
+                        position.entry_price = entry_price
+                        
                     if position.shares is None or position.shares > MIN_SHARES_REQUIRED:
-                        if last_entry_price == 0:
-                            #get the last price in db
-                            Trade = Query()
-                            all = self.js_trades.search(Trade.type == "B")
-                            if len(all) > 0:
-                                doc = all[-1]
-                                last_entry_price = doc["entry_price"]
-
+                        # if last_entry_price == 0:
                         if last_entry_price == 0:
                             #try to get the last entry with bybit request
-                            orders = self.session.get_order_history(
+                            orders = self.session.get_executions(
                                 category="spot",
                                 limit=50, 
                                 orderStatus="Filled"
@@ -300,8 +324,8 @@ class Strategy():
                             
 
                             if stats['symbol'] == self.instrument:                        
-                                avgPrice = stats['avgPrice']
-                                shares = float(stats['qty'])
+                                avgPrice = stats['execPrice']
+                                shares = float(stats['execQty'])
                                 # status = stats['orderStatus']
                                 if avgPrice not in ("",0,'0'):
                                     avgPrice = float(avgPrice)
@@ -311,9 +335,9 @@ class Strategy():
                                     row.update({"high":position.high})
                                     row.update({"low":position.low})
                                     row.update({"close":position.close})
-                                    row.update({"entry_price":entry_price})
+                                    row.update({"entry_price":avgPrice})
                                     row.update({"entry_date":position.date.strftime("%Y-%m-%d %H:%M:%S")})
-                                    row.update({"exit_price":entry_price+self.pips})
+                                    row.update({"exit_price":avgPrice+self.pips})
                                     row.update({"shares":shares})
                                     row.update({"type":"B"})
                                     row.update({"status":"Filled"})
@@ -323,40 +347,88 @@ class Strategy():
                                 last_entry_price = avgPrice
                                 if last_exit_price == 0:
                                     last_exit_price = avgPrice + self.pips
+                        # else:0x2f2B6e842c3C834031a584F6B9c3c6dB44a16383
+
+
+                        if last_entry_price == 0:
+                            #get the last price in db
+                            Trade = Query()
+                            all = self.js_trades.search(Trade.type == "B")
+                            if len(all) > 0:
+                                doc = all[-1]
+                                last_entry_price = doc["entry_price"]
+
+
+                        # last_exit_price = last_entry_price+self.pips
+                        print(colored(f"    exit price setted to {last_exit_price}",color))
+                        position.exit_price = last_exit_price
+                        print(colored(f"    entry price setted to {last_entry_price}",color))
+                        position.entry_price = last_entry_price
+
+                        status = ''
+                        if order is None:
+                            print(colored(f"Exit position at {position.exit_price}",color))
+                            [status,orderId] = self.exit_position( position)
                         else:
-                            last_exit_price = last_entry_price+self.pips
+                            print(colored(f' Continue to sell at {position.exit_price}',color))
 
-
-                        [status,orderId] = self.exit_position( position)
-                        
-                        if status == 'Filled':
-                            shares = row['shares']
+                        if status in ('Filled','New'):
+                            MODE = 0
+                            last_entry_price = position.entry_price
+                            shares = position.shares
                             sell_counter = 0
                             cost = last_entry_price*shares                
                             earn = last_exit_price*shares
                             sum += earn - cost
+                            '''
                             if sum < -10:
                                 send_email(Mail_Subject.NEGATIVE_GAIN)  
                                 self.done = True                      
                                 exit()
+                            '''
                         else:
-                            sell_counter += 1
-                            if sell_counter > self.max_try_to_sell:
-                                sell_counter = 0
+                            created = datetime.datetime.fromtimestamp(int(order['updatedTime'])/1000)
+                            now = datetime.datetime.now()
+                            elapsed = now - created
+                            orderId = order['orderId']
+                            print(colored(f"elapsed time is {elapsed}",color))
+                            if(elapsed > datetime.timedelta(seconds=float(self.max_wait_sell * MIN_AS_SECOND))):
+                                print(colored("Elapsed time...need to amend order",color))
                                 low = position.low
-                                last_exit_price = low if MODE == 1 else last_entry_price
-                                last_entry_price = last_exit_price-self.pips
+                                if MODE == 0:
+                                    print(colored(' Try to sell bought price',color))
+                                    last_exit_price = last_entry_price
+                                    MODE = 1
+                                elif MODE == 1:
+                                    print(colored(' Try to sell bought price minus 1 pips',color))
+                                    last_exit_price = last_entry_price-self.pips
+                                    MODE = 2
+                                elif MODE == 2:
+                                    print(colored(' Bought price too expensive. Go out!',color))
+                                    last_exit_price = low
 
+                                if order['price'] != last_exit_price:
+                                    res = self.session.amend_order(orderId = orderId,category="spot",symbol=self.instrument,price=last_exit_price)
+                                    while float(res['retCode']) != 0:
+                                        time.sleep(1/1000)
 
-                        self.js_trades.insert(row)        
-                        self.trades.append(row) 
-                        row = {}  
+                        if 'status' in row and row['status'] != 'Cancelled':
+                            self.js_trades.insert(row)        
+                            self.trades.append(row)     
+                            self.trades_persist()
+                            row = {}    
+        
+                    else:      
+                        status = ''  
+                        if order is None:
+                            print(colored(f"    Enter position at {position.entry_price}",color))
+                            [status,orderId] = self.entry_position( position)
+                        else:
+                            print(colored(f'    Continue to buy at {position.entry_price}',color))
 
-                    else:        
-                        [status,orderId] = self.entry_position( position)
-                        isFilled = status == 'Filled'
-                        if isFilled:
-                            order = self.session.get_order_history(
+                        if status in ('Filled','New'):
+                            MODE = 0
+                            order = self.session.get_executions(
                                 category="spot",
                                 limit=1,                        
                                 orderId=orderId,
@@ -364,36 +436,54 @@ class Strategy():
                             )
                             
                             stats = order['result']['list'][0]
-                            avgPrice = stats['avgPrice']
-                            status = stats['orderStatus']
+                            avgPrice = stats['execPrice']
+                            status = 'Filled'
                             row.update({"orderId":orderId})
 
-                            if avgPrice != "" and status != "Cancelled":
+                            if avgPrice != "":
                                 avgPrice = float(avgPrice)
                                 last_entry_price = avgPrice
                                 last_exit_price = avgPrice + self.pips
-                                row.update({"status":'filled'})
+                                row.update({"status": status})
                                 buy_counter = 0
                         else:
+                            last_entry_price = float(order['price'])
                             row.update({"status":'Cancelled'})
-                            buy_counter += 1
-                            if buy_counter > self.max_try_to_buy:
-                                buy_counter = 0
+                            
+                            created = datetime.datetime.fromtimestamp(int(order['updatedTime'])/1000)
+                            now = datetime.datetime.now()
+                            elapsed = now - created
+                            orderId = order['orderId']
+                            print(colored(f"    Elapsed time is {elapsed}",color))
+                            if(elapsed > datetime.timedelta(seconds=float(self.max_wait_buy * MIN_AS_SECOND))):
+                                print(colored("Elapsed time...need to amend order",color))
                                 low = position.low
-                                last_entry_price = low if MODE == 1 else last_entry_price-1
+                                open = position.open
+                                last_entry_price = open
+                                # if MODE == 0 else last_entry_price+self.pips
                                 last_exit_price = last_entry_price+self.pips
+                                
+                                if order['price'] != last_entry_price and order['price'][:-1] != '-':
+                                    q = self.round_down(self.balance/last_entry_price,2)
+                                    # print(colored(f"new quantity is {q}",color))
+                                    res = self.session.amend_order(orderId = orderId,category="spot",symbol=self.instrument,price=last_entry_price,qty=q)
+                                    while float(res['retCode']) != 0:
+                                        time.sleep(1/1000)
 
-                        self.trades.append(row)     
-                        row = {}    
+                        if row['status'] != 'Cancelled':
+                            self.js_trades.insert(row)        
+                            self.trades.append(row)     
+                            self.trades_persist()
+                            row = {}    
 
-                    self.done = True
-                    time.sleep(1)
+                    time.sleep(2)
+                    
                 except Exception as ex:
                     print(str(ex))
                     print(str(ex.__traceback__.tb_lineno))
                     print(str(ex.__traceback__.tb_lasti))
             else:
-                time.sleep(1)
+                time.sleep(2)
                 self.done = False
 
     def manage_alerts(self, position, buy_variation_dump, buy_variation_pump):
@@ -417,7 +507,12 @@ class Strategy():
             exit()            
         '''
 
-    def switch_price_reference(self, ref, o, h, l, c):
+    def switch_price_reference(self, ref, p):
+        o = p.open
+        h = p.high
+        l = p.low
+        c = p.close
+
         if ref == Reference.OPEN:
             e = o
 
@@ -443,7 +538,7 @@ class Strategy():
     def entry_position(self, position):
         global buy_counter,last_entry_price,last_exit_price,sum,dataframe,low,row,entry_price
         self.balance = self.get_balance('USDT')
-        shares = (self.balance + sum) / entry_price
+        shares = (self.balance) / entry_price
         if not self.checkVolume or position.volume >= shares:
             result = {}
             status = ''
@@ -457,8 +552,8 @@ class Strategy():
                 print((str(ex)))
                 print(str(ex.__traceback__.tb_lineno))
 
-            last_entry_price = position.low
-            last_exit_price = position.low+self.pips
+            last_entry_price = entry_price
+            last_exit_price = last_entry_price+self.pips
             return [status,orderId]
         
         else:
@@ -469,24 +564,25 @@ class Strategy():
 
     def add_entry(self,p,s):
                 try:
+                    price = position.entry_price
                     result = self.session.place_order(category="spot",
                     symbol=self.instrument,
                     side="Buy",
                     orderType="Limit",
                     qty=self.round_down(s,2),
-                    price=self.round_down(entry_price,6),
+                    price=self.round_down(price,6),
                     timeInForce="GTC",
                     # orderLinkId="spot-test-postonly",
                     isLeverage=0,
                     orderFilter="Order") 
-                    row.update({"details":f"VENTE a {entry_price} sur la bougie du {p.date}"})
+                    row.update({"details":f"Achat a {price} sur la bougie du {p.date}"})
                     row.update({"open":p.open})
                     row.update({"high":p.high})
                     row.update({"low":p.low})
                     row.update({"close":p.close})
-                    row.update({"entry_price":entry_price})
+                    row.update({"entry_price":price})
                     row.update({"entry_date":p.date.strftime("%Y-%m-%d %H:%M:%S")})
-                    row.update({"exit_price":entry_price+self.pips})
+                    row.update({"exit_price":price+self.pips})
                     row.update({"shares":s})
                     row.update({"type":"B"})
                     
@@ -496,26 +592,28 @@ class Strategy():
                     print((str(ex)))
                     print(str(ex.__traceback__.tb_lineno))
                 
-    def add_exit(self,x,s,p):
+    def add_exit(self,p,s):
         result = {}
         try:
+            price = position.exit_price
             result = self.session.place_order(category="spot",
             symbol=self.instrument,
             side="Sell",
             orderType="Limit",
             qty=self.round_down(s,6),
-            price=self.round_down(x,6),
+            price=self.round_down(price,4),
             timeInForce="GTC",
             isLeverage=0,
             orderFilter="Order") 
 
-            row.update({"details":f"VENTE a {x} sur la bougie du {p.date}"})
+            row.update({"details":f"VENTE a {price} sur la bougie du {p.date}"})
             row.update({"open":p.open})
             row.update({"high":p.high})
             row.update({"low":p.low})
             row.update({"close":p.close})
             row.update({"exit_date":p.date.strftime("%Y-%m-%d %H:%M:%S")})
-            row.update({"exit_price":x})
+            row.update({"entry_price":position.entry_price})
+            row.update({"exit_price":price})
             row.update({"shares":s})
             row.update({"type":"S"})
             row.update({"balance":sum})
@@ -527,11 +625,11 @@ class Strategy():
             print(str(e.__traceback__.tb_lineno))
 
     def exit_position(self, position):
-        global sell_counter,sum,last_entry_price,last_exit_price,row
+        global sell_counter,sum,row
         global low
         try:
-            x = position.open if last_exit_price == 0 else self.round_down(last_exit_price,6)
-            last_exit_price = x
+            x = position.open if position.exit_price == 0 else self.round_down(position.exit_price,4)
+            position.exit_price = x
             d = position.date
         except Exception as e:
             print((str(e)))
@@ -575,7 +673,7 @@ class Strategy():
 
     def trades_persist(self):
         self.df_trades = pd.DataFrame(self.trades)
-        self.df_trades.to_csv(f"Report[MAJ{self.runDate.strftime(DAY_FORMAT)}]_FILLED_2D.csv",decimal=',')        
+        self.df_trades.to_csv(f"Report.csv",decimal=',')        
 
 
     def fill_position_from_array(self,position,arr):
