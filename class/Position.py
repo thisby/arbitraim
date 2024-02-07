@@ -4,10 +4,10 @@ import datetime
 class Position:
     def __init__(self,d,o,h,l,c,v):
         self.date = d
-        self.low = l
-        self.high = h
-        self.close = c
-        self.open = o
+        self.low = round(l,4)
+        self.high = round(h,4)
+        self.close = round(c,4)
+        self.open = round(o,4)
         self.volume = v
         self.entry_price = 0        
         self.entry_date = datetime.datetime.min

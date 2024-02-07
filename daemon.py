@@ -25,8 +25,8 @@ def handle_message(ws,message):
     try:
         #websocket.dump("msg",message)
         db.truncate()
-        d = datetime.datetime.fromtimestamp(message['data'][0]['start']/1000)
-        print(d)
+        d = datetime.datetime.fromtimestamp(message['data'][0]['timestamp']/1000)
+        print("time:" + str(d))
         o = float(message['data'][0]['open'])
         h = float(message['data'][0]['high'])
         l = float(message['data'][0]['low'])
