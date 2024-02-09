@@ -7,11 +7,13 @@ from pybit.unified_trading import WebSocket
 import websocket
 from tinydb import TinyDB, Query
 
+
 base = "USDC"
 quote = "USDT"
 instrument = base + quote
 DEBUG = not True
 ohlcv = pd.DataFrame(columns=["date","Open","High","Low","Close","Volume"])
+# from Common import Common
 
 
 def handle_message_bybit(message):
@@ -66,7 +68,7 @@ def run_kline():
 try:
 
     db = TinyDB('ohlcv.json')
-
+    
     websocket.enableTrace(True)
     if (not DEBUG):
         ws = WebSocket(

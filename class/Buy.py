@@ -2,30 +2,40 @@ from termcolor import colored
 
 class Buy:
 
+    ordermanager = None
+    def __init__(self,ordermgr) -> None:
+        self.ordermanager = ordermgr
+        self.commonmanager = ordermgr.commonmanager
+        self.sessionmanager = ordermgr.sessionmanager
+        self.walletmanager = self.commonmanager.walletmanager
+
     def buy(self):
-        global entry_price,position,quantity
         print(colored("cas d'achat","blue"))
         print(colored("Aucun ordre en cours d'achat, création..","blue"))
         print(colored("On rentre au prix de référence","blue"))
-        position = self.get_last_position()    
-        entry_price = self.switch_price_reference(self.ref)
-        quantity = self.round_down(self.get_balance(self.quote) / entry_price,2)
-        self.position = position
-        position.entry_price = entry_price
-        position.exit_price = position.entry_price + self.pips
-        print(colored(f"    Enter position at {position.entry_price}",color))
+        position = self.commonmanager.get_last_position()    
+        entry_price = self.commonmanager.switch_price_reference(self.commonmanager.reference)
+        quantity = self.commonmanager.round_down(self.walletmanager.get_balance(self.commonmanager.quote) / entry_price,2)
+        self.trade.quantity = quantity
+        self.trade.entry_price = entry_price
+        position.entry_price = entry_price 
+        position.exit_price = position.entry_price + self.commonmanager.pips
+        self.trade.exit_price = position.exit_price
+
+        print(colored(f"    Enter position at {position.entry_price}",self.trade.getTradeLevel()))
         [status,order] = self.entry_position()
+        self.trade.position = position
         if order is not None and 'result' in order:
             last_order_id = order['result']['orderId']
 
+        return position
+    
     def amend_buy(self,order):
-        global entry_price
-        self.amend_order(entry_price,order,'buy')
+        self.ordermanager.amend_order(self.trade.entry_price,order,'buy')
 
     def update_buy_price(self):        
-        global color,last_entry_price
-        print(colored("Elapsed time...need to amend order",color))
-        position = self.get_last_position()
+        print(colored("Elapsed time...need to amend order",self.trade.getTradeLevel()))
+        position = self.commonmanager.get_last_position()
         low = position.low
         open = position.open
         last_entry_price = open
@@ -33,8 +43,8 @@ class Buy:
         return last_entry_price
     
     def entry_position(self):
-        global quantity,entry_price,position,exit_price
-        if not self.checkVolume or position.volume >= quantity:
+        position = self.commonmanager.get_last_position()
+        if not self.commonmanager.checkVolume or position.volume >= self.trade.quantity:
             status = ''
             orderId = ''
             try:
@@ -54,7 +64,7 @@ class Buy:
                 print("     " +str(ex.__traceback__.tb_lineno))
                 print("     " +str(ex.__traceback__.tb_lasti))
 
-            exit_price = entry_price+self.pips
+            exit_price = self.trade.entry_price+self.commonmanager.pips
             return [status,orderId]
         
         else:
@@ -63,15 +73,15 @@ class Buy:
         return ['','']
 
     def add_entry(self):
-        global position,quantity,entry_price
         try:
-            price = entry_price
-            result = self.session.place_order(category="spot",
-            symbol=self.instrument,
+            position = self.commonmanager.get_last_position()
+            price = self.trade.entry_price
+            result = self.sessionmanager.place_order(category="spot",
+            symbol=self.commonmanager.instrument,
             side="Buy",
             orderType="Limit",
-            qty=self.round_down(quantity,2),
-            price=self.round_down(price,6),
+            qty=self.commonmanager.round_down(self.trade.quantity,2),
+            price=self.commonmanager.round_down(price,6),
             timeInForce="GTC",
             # orderLinkId="spot-test-postonly",
             isLeverage=0,
@@ -86,7 +96,7 @@ class Buy:
             print("     " +str(ex.__traceback__.tb_lasti))
 
     def valid_entry(self,id):
-        position = self.position
+        position = self.trade.position
         row = {}
         row.update({"details":f"Achat a {position.entry_price} sur la bougie du {position.date}"})
         row.update({"open":position.open})
@@ -95,10 +105,9 @@ class Buy:
         row.update({"close":position.close})
         row.update({"entry_price":position.entry_price})
         row.update({"entry_date":position.date.strftime("%Y-%m-%d %H:%M:%S")})
-        row.update({"exit_price":position.entry_price+self.pips})
+        row.update({"exit_price":float(position.entry_price)+self.commonmanager.pips})
         row.update({"shares":position.shares})
         row.update({"type":"B"})
         row.update({"status":"Filled"})
         row.update({"orderId":id})
-        self.trade = row
         return row
