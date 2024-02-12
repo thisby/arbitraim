@@ -13,7 +13,6 @@ quote = "USDT"
 instrument = base + quote
 DEBUG = not True
 ohlcv = pd.DataFrame(columns=["date","Open","High","Low","Close","Volume"])
-# from Common import Common
 
 
 def handle_message_bybit(message):
@@ -26,6 +25,9 @@ def handle_message_backtest(m):
 def handle_message(ws,message):
     try:
         #websocket.dump("msg",message)
+        if message['data'][0]['confirm'] == False:
+            return
+        
         db.truncate()
         d = datetime.datetime.fromtimestamp(message['data'][0]['timestamp']/1000)
         print("time:" + str(d))
@@ -90,4 +92,4 @@ except Exception as e:
     print(str(e.__traceback__.tb_lineno))
 
 while True:
-    time.sleep(1)
+    time.sleep(250)

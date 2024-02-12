@@ -53,7 +53,7 @@ class Sell:
             if avgPrice != "":
                 avgPrice = float(avgPrice)
                 entry_price = avgPrice
-                exit_price = avgPrice + self.commonmanager.pips
+                exit_price = round(avgPrice + self.commonmanager.pips,4)
             
             return order
         
@@ -130,7 +130,6 @@ class Sell:
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))
             
-
     def valid_exit(self,id):
         position = self.trade.position
         row = {}
@@ -140,7 +139,8 @@ class Sell:
         row.update({"high":position.high})
         row.update({"low":position.low})
         row.update({"close":position.close})
-        row.update({"exit_date":position.date.strftime("%Y-%m-%d %H:%M:%S")})
+        row.update({"exit_date":str(position.date)})
+                    # .strftime("%Y-%m-%d %H:%M:%S")})
         row.update({"entry_price":position.entry_price})
         row.update({"exit_price":position.exit_price})
         row.update({"shares":position.shares})

@@ -21,6 +21,9 @@ class Common:
     reference = Reference.OPEN
     position = None
 
+
+
+
     def __init__(self,walletmanager) -> None:
         self.walletmanager = walletmanager
         pass
@@ -86,8 +89,6 @@ class Common:
         pos = self.fill_position_from_array(position,serie.array)
         return pos
     
-
-
     def show(self,sum):
         print((self.balance + sum))
         print((self.avgVolume))
@@ -148,6 +149,3 @@ class Common:
         if ref == Reference.OC2:
             e = (o+c)/2
         return e
-    
-  
-

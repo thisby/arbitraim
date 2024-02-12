@@ -3,8 +3,8 @@ import time
 from termcolor import colored
 
 MIN_AS_SECOND = 60
-MAX_WAIT_SELL = 1
-MAX_WAIT_BUY = 1
+MAX_WAIT_SELL = 45
+MAX_WAIT_BUY = 15
 FILLED = 'Filled'
 UNFILLED = 'Unfilled'
 
@@ -15,17 +15,17 @@ class Order:
         self.commonmanager = common
         self.walletmanager = common.walletmanager
         
-
     def amend_order(self,price,order,side):
         try:
             orderId = order['orderId']
             instrument = self.commonmanager.quote if side == 'buy' else self.commonmanager.base
             balance = self.commonmanager.round_down(self.walletmanager.get_balance(instrument),2)
             quantity = self.commonmanager.round_down(balance / price,2)
+            amend_price = round(float(self.commonmanager.position.high)+(2*self.commonmanager.pips),4)
             if float(order['price']) != price:
                 res = self.sessionmanager.amend_order(orderId = orderId,category="spot",symbol=self.commonmanager.instrument,price=price,qty=quantity)
             else:
-                res = self.sessionmanager.amend_order(orderId = orderId,category="spot",symbol=self.commonmanager.instrument,price=float(self.commonmanager.position.high)+(2*self.commonmanager.pips),qty=quantity)
+                res = self.sessionmanager.amend_order(orderId = orderId,category="spot",symbol=self.commonmanager.instrument,price=amend_price,qty=quantity)
                 while float(res['retCode']) != 0:
                     time.sleep(1/1000)
                 res = self.sessionmanager.amend_order(orderId = orderId,category="spot",symbol=self.commonmanager.instrument,price=price,qty=quantity)

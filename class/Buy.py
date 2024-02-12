@@ -19,7 +19,7 @@ class Buy:
         self.trade.quantity = quantity
         self.trade.entry_price = entry_price
         position.entry_price = entry_price 
-        position.exit_price = position.entry_price + self.commonmanager.pips
+        position.exit_price = round(position.entry_price + self.commonmanager.pips,4)
         self.trade.exit_price = position.exit_price
 
         print(colored(f"    Enter position at {position.entry_price}",self.trade.getTradeLevel()))
@@ -38,9 +38,7 @@ class Buy:
         position = self.commonmanager.get_last_position()
         low = position.low
         open = position.open
-        last_entry_price = open
-        # if MODE == 0 else last_entry_price+self.pips
-        return last_entry_price
+        return open
     
     def entry_position(self):
         position = self.commonmanager.get_last_position()
@@ -97,6 +95,7 @@ class Buy:
 
     def valid_entry(self,id):
         position = self.trade.position
+        exit_price = round(float(position.entry_price)+self.commonmanager.pips,4)
         row = {}
         row.update({"details":f"Achat a {position.entry_price} sur la bougie du {position.date}"})
         row.update({"open":position.open})
@@ -104,8 +103,9 @@ class Buy:
         row.update({"low":position.low})
         row.update({"close":position.close})
         row.update({"entry_price":position.entry_price})
-        row.update({"entry_date":position.date.strftime("%Y-%m-%d %H:%M:%S")})
-        row.update({"exit_price":float(position.entry_price)+self.commonmanager.pips})
+        row.update({"entry_date":str(position.date)})
+        # row.update({"entry_date":position.date.strftime("%Y-%m-%d %H:%M:%S")})
+        row.update({"exit_price":exit_price})
         row.update({"shares":position.shares})
         row.update({"type":"B"})
         row.update({"status":"Filled"})

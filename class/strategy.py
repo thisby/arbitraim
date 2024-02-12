@@ -145,13 +145,13 @@ class Strategy():
                     if last_order_executed_side == 'Buy':
                         if self.trademanager.position != None:
                             print(colored('on vérifie si on a pas déja record la transaction'))
-                            if len(self.trademanager.trades) == 0 or self.trademanager.trades[-1]['orderId'] != last_order_executed_orderId:
+                            if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_order_executed_orderId:
                                 print(colored('on enregistre le dernier achat'))
                                 self.trademanager.position.entry_price = last_order_executed['execPrice']
                                 row = self.buymanager.valid_entry(last_order_executed_orderId)  
+                                self.trademanager.trades = []
                                 self.trademanager.trades.append(row)
                                 self.trademanager.trades_persist()                                
-                                self.df_trades.to_csv('report.csv', mode='a', index=False, header=False)
 
                         print(colored('La dernière transaction est un achat, on vends','blue'))
                         print(colored(' on teste si on a pas déja un ordre en corus de vente','blue'))
@@ -184,7 +184,7 @@ class Strategy():
                         else:
                             print(colored(' Non? on crée un ordre de vente ','blue'))
                             entry_price = float(last_order_executed['execPrice'])
-                            exit_price = entry_price + self.pips
+                            exit_price = round(entry_price + self.pips,4)
                             quantity = self.commonmanager.round_down(self.walletmanager.get_balance(self.base) / exit_price,2)
                             
                             self.trademanager.entry_price = entry_price
@@ -197,14 +197,13 @@ class Strategy():
                     else:
                         if self.trademanager.position != None:
                             print(colored('on vérifie si on a pas déja record la transaction'))
-                            if len(self.trademanager.trades) == 0 or self.trademanager.trades[-1]['orderId'] != last_order_executed_orderId:
+                            if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_order_executed_orderId:
                                 print(colored('on enregistre la dernière vente'))
                                 self.trademanager.position.exit_price = float(last_order_executed['execPrice'])
                                 row = self.sellmanager.valid_exit(last_order_executed_orderId)
+                                self.trademanager.trades = []
                                 self.trademanager.trades.append(row)
                                 self.trademanager.trades_persist()                                
-                                self.df_trades.to_csv('report.csv', mode='a', index=False, header=False)
-
                         print(colored('La dernière transaction est une vente, on achète','blue'))
                         print(colored(' on teste si on a pas déja un ordre en corus d''achat','blue'))
                         orders = self.sessionmanager.get_open_orders(
@@ -236,7 +235,7 @@ class Strategy():
                     print("     " +str(ex.__traceback__.tb_lineno))
                     print("     " +str(ex.__traceback__.tb_lasti))
 
-                time.sleep(2)
+                time.sleep(50)
                 continue
 
 
