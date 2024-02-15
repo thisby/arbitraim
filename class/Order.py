@@ -10,6 +10,8 @@ UNFILLED = 'Unfilled'
 
 class Order:
     
+    order = None
+
     def __init__(self,sess,common) -> None:
         self.sessionmanager = sess
         self.commonmanager = common

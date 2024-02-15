@@ -1,3 +1,4 @@
+import datetime
 from termcolor import colored
 
 from Trade import Trade
@@ -70,6 +71,7 @@ class Sell:
         entry_price = self.trade.entry_price
         exit_price = self.trade.exit_price
         COLOR = self.trade.getTradeLevel()
+        sell_position = self.ordermanager.commonmanager.get_last_position()
         print(colored("Elapsed time...need to amend order",COLOR))
         mode = self.trade.MODE
         if mode == 0:
@@ -131,10 +133,12 @@ class Sell:
             print("     " +str(ex.__traceback__.tb_lasti))
             
     def valid_exit(self,id):
+        order = self.ordermanager.order 
         position = self.trade.position
         row = {}
         sum = 0
-        row.update({"details":f"VENTE a {position.exit_price} sur la bougie du {position.date}"})
+        execTime = datetime.datetime.fromtimestamp(int(order['execTime'])/1000)
+        row.update({"details":f"VENTE a {order['execPrice']} sur la bougie du {execTime}"})
         row.update({"open":position.open})
         row.update({"high":position.high})
         row.update({"low":position.low})
@@ -143,7 +147,7 @@ class Sell:
                     # .strftime("%Y-%m-%d %H:%M:%S")})
         row.update({"entry_price":position.entry_price})
         row.update({"exit_price":position.exit_price})
-        row.update({"shares":position.shares})
+        row.update({"shares":order['execQty']})
         row.update({"type":"S"})
         row.update({"balance":sum})
         row.update({"status":"Filled"})

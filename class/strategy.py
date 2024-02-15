@@ -24,6 +24,7 @@ UNFILLED = 'Unfilled'
 MIN_SHARES_REQUIRED = 9
 MAX_RUNNING_TIME = 300
 MIN_AS_SECOND = 60
+last_executed_order_id = 0
 MODE = 0 # 0 for aggressive (entry price selling), 1 for cool mode (entry price minored 1 pips), 2 for middle (low price selling)
 
 
@@ -141,8 +142,15 @@ class Strategy():
                         last_order_executed = orders['result']['list'][0]                
                         last_order_executed_side = last_order_executed['side']
                         last_order_executed_orderId = last_order_executed['orderId']
+                    
+                    if last_executed_order_id != last_order_executed_orderId:
+                        self.buymanager.trade.MODE = 0
+                        self.sellmanager.trade.MODE = 0
+
+
 
                     if last_order_executed_side == 'Buy':
+                        self.buymanager.ordermanager.order = last_order_executed
                         if self.trademanager.position != None:
                             print(colored('on vérifie si on a pas déja record la transaction'))
                             if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_order_executed_orderId:
@@ -195,6 +203,7 @@ class Strategy():
                             # self.report_filled_trade()
                             
                     else:
+                        self.sellmanager.ordermanager.order = last_order_executed
                         if self.trademanager.position != None:
                             print(colored('on vérifie si on a pas déja record la transaction'))
                             if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_order_executed_orderId:
@@ -235,8 +244,8 @@ class Strategy():
                     print("     " +str(ex.__traceback__.tb_lineno))
                     print("     " +str(ex.__traceback__.tb_lasti))
 
-                time.sleep(50)
-                continue
+                time.sleep(100/1000)
+                # continue
 
 
             else:

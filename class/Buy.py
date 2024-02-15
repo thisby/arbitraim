@@ -1,6 +1,11 @@
+import datetime
 from termcolor import colored
 
+from Trade import Trade
+
 class Buy:
+
+    trade = Trade()
 
     ordermanager = None
     def __init__(self,ordermgr) -> None:
@@ -94,10 +99,11 @@ class Buy:
             print("     " +str(ex.__traceback__.tb_lasti))
 
     def valid_entry(self,id):
+        order = self.ordermanager.order 
         position = self.trade.position
-        exit_price = round(float(position.entry_price)+self.commonmanager.pips,4)
         row = {}
-        row.update({"details":f"Achat a {position.entry_price} sur la bougie du {position.date}"})
+        execTime = datetime.datetime.fromtimestamp(int(order['execTime'])/1000)
+        row.update({"details":f"ACHAT a {order['execPrice']} sur la bougie du {execTime}"})
         row.update({"open":position.open})
         row.update({"high":position.high})
         row.update({"low":position.low})
@@ -105,8 +111,8 @@ class Buy:
         row.update({"entry_price":position.entry_price})
         row.update({"entry_date":str(position.date)})
         # row.update({"entry_date":position.date.strftime("%Y-%m-%d %H:%M:%S")})
-        row.update({"exit_price":exit_price})
-        row.update({"shares":position.shares})
+        row.update({"exit_price":order['execPrice']})
+        row.update({"shares":order['execQty']})
         row.update({"type":"B"})
         row.update({"status":"Filled"})
         row.update({"orderId":id})
