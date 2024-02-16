@@ -5,7 +5,7 @@ import time
 import pandas as pd
 from pybit.unified_trading import WebSocket
 import websocket
-from tinydb import TinyDB, Query
+from tinydb import TinyDB
 
 
 base = "USDC"
