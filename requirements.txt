@@ -2,7 +2,6 @@ altair==5.2.0
 beautifulsoup4==4.9.3
 ccxt==4.0.53
 lxml==4.9.3
-lxml==4.9.2
 matplotlib==3.7.1
 numpy==1.24.1
 pandas==2.0.2
