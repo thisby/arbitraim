@@ -24,7 +24,6 @@ UNFILLED = 'Unfilled'
 MIN_SHARES_REQUIRED = 9
 MAX_RUNNING_TIME = 300
 MIN_AS_SECOND = 60
-last_executed_order_id = 0
 MODE = 0 # 0 for aggressive (entry price selling), 1 for cool mode (entry price minored 1 pips), 2 for middle (low price selling)
 
 
@@ -121,7 +120,7 @@ class Strategy():
 
         sellmanager.trade = self.trademanager
         buymanager.trade = self.trademanager
-   
+        last_executed_order_id = 0
         self.done = False
         while True:
             if not self.done:
@@ -135,27 +134,38 @@ class Strategy():
                         limit=1, 
                         orderStatus="Filled",
                     )
-                    last_order_executed_side = 'Buy'
-                    last_order_executed = {}
+                    order_executed_side = 'Buy'
+                    executed_order = {}
+                    
+
+                    
 
                     if len(orders['result']['list']) > 0:
-                        last_order_executed = orders['result']['list'][0]                
-                        last_order_executed_side = last_order_executed['side']
-                        last_order_executed_orderId = last_order_executed['orderId']
-                    
-                    if last_executed_order_id != last_order_executed_orderId:
-                        self.buymanager.trade.MODE = 0
-                        self.sellmanager.trade.MODE = 0
+                        # on teste si on a eu un ordre réussi 
+                        executed_order = orders['result']['list'][0]                
+                        # on récupère si c'est un achat ou une vente
+                        executed_order_side = executed_order['side']
+                        # on récupère l'id du dernier ordre executé
+                        last_executed_order_orderId = executed_order['orderId']
 
+                        if last_executed_order_id == 0:
+                            last_executed_order_id = last_executed_order_orderId
+                            self.buymanager.trade.MODE = 0
+                            self.sellmanager.trade.MODE = 0
 
+                    if (last_executed_order_id != last_executed_order_orderId):
+                            #si les 2 id diffèrent, on est dans un cas ou l'on doit repartir a 0
+                            self.buymanager.trade.MODE = 0
+                            self.sellmanager.trade.MODE = 0
+                            last_executed_order_id = last_executed_order_orderId
 
-                    if last_order_executed_side == 'Buy':
-                        self.buymanager.ordermanager.order = last_order_executed
+                    if order_executed_side == 'Buy':
+                        self.buymanager.ordermanager.order = executed_order
                         if self.trademanager.position != None:
                             print(colored('on vérifie si on a pas déja record la transaction'))
                             if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_order_executed_orderId:
                                 print(colored('on enregistre le dernier achat'))
-                                self.trademanager.position.entry_price = last_order_executed['execPrice']
+                                self.trademanager.position.entry_price = executed_order['execPrice']
                                 row = self.buymanager.valid_entry(last_order_executed_orderId)  
                                 self.trademanager.trades = []
                                 self.trademanager.trades.append(row)
@@ -178,7 +188,7 @@ class Strategy():
                             if elapsed:
                                 print(colored(' il est expire on le mets a jour ','blue'))
                                 
-                                entry_price = float(last_order_executed['execPrice'])
+                                entry_price = float(executed_order['execPrice'])
                                 self.trademanager.entry_price = entry_price
 
                                 exit_price = float(order['price'])
@@ -191,7 +201,7 @@ class Strategy():
 
                         else:
                             print(colored(' Non? on crée un ordre de vente ','blue'))
-                            entry_price = float(last_order_executed['execPrice'])
+                            entry_price = float(executed_order['execPrice'])
                             exit_price = round(entry_price + self.pips,4)
                             quantity = self.commonmanager.round_down(self.walletmanager.get_balance(self.base) / exit_price,2)
                             
@@ -203,12 +213,12 @@ class Strategy():
                             # self.report_filled_trade()
                             
                     else:
-                        self.sellmanager.ordermanager.order = last_order_executed
+                        self.sellmanager.ordermanager.order = executed_order
                         if self.trademanager.position != None:
                             print(colored('on vérifie si on a pas déja record la transaction'))
                             if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_order_executed_orderId:
                                 print(colored('on enregistre la dernière vente'))
-                                self.trademanager.position.exit_price = float(last_order_executed['execPrice'])
+                                self.trademanager.position.exit_price = float(executed_order['execPrice'])
                                 row = self.sellmanager.valid_exit(last_order_executed_orderId)
                                 self.trademanager.trades = []
                                 self.trademanager.trades.append(row)

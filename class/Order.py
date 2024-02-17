@@ -2,7 +2,7 @@ import datetime
 import time
 from termcolor import colored
 
-MIN_AS_SECOND = 60
+MIN_AS_SECOND = 2
 MAX_WAIT_SELL = 45
 MAX_WAIT_BUY = 15
 FILLED = 'Filled'
