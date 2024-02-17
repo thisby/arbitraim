@@ -1,5 +1,6 @@
 import datetime
 import time
+import traceback
 from termcolor import colored
 
 MIN_AS_SECOND = 2
@@ -37,6 +38,7 @@ class Order:
 
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print(order + " vs " + price)
             print("     " +str(ex.__traceback__.tb_lineno))
@@ -83,6 +85,7 @@ class Order:
         
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))            
@@ -105,6 +108,7 @@ class Order:
         
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))

@@ -2,6 +2,7 @@
 from email.mime.multipart import MIMEMultipart
 from email.mime.text import MIMEText
 import smtplib
+import traceback
 from Mail_Subject import Mail_Subject
 
 smtp_server = 'smtp.free.fr'
@@ -90,5 +91,6 @@ def send_email(mail_subject):
         server.quit()
         print(f"{mail_subject.name} - E-mail envoyé avec succès.")
     except Exception as e:
+        traceback.format_exc()
         print(('Erreur lors de l\'envoi de l\'e-mail :', str(e)))
         print(str(e.__traceback__.tb_lineno))

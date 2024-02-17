@@ -1,4 +1,5 @@
 import datetime
+import traceback
 from termcolor import colored
 
 from Trade import Trade
@@ -26,6 +27,7 @@ class Sell:
 
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))
@@ -60,6 +62,7 @@ class Sell:
         
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))
@@ -108,6 +111,7 @@ class Sell:
 
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))
@@ -128,6 +132,7 @@ class Sell:
                 
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))

@@ -1,5 +1,6 @@
 import datetime
 import json
+import traceback
 from numpy import size
 import pandas as pd
 from termcolor import colored
@@ -54,6 +55,7 @@ class Common:
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
             exception = str(ex)
+            traceback.format_exc()
             print("     " +  exception)
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))

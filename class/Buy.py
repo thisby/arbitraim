@@ -1,5 +1,6 @@
 import datetime
 from termcolor import colored
+import traceback
 
 from Trade import Trade
 
@@ -26,7 +27,9 @@ class Buy:
         position.entry_price = entry_price 
         position.exit_price = round(position.entry_price + self.commonmanager.pips,4)
         self.trade.exit_price = position.exit_price
-
+        if entry_price == 0 or quantity == 0:
+            print(colored('Error quantity or price cannot be null','light_red'))
+            exit
         print(colored(f"    Enter position at {position.entry_price}",self.trade.getTradeLevel()))
         [status,order] = self.entry_position()
         self.trade.position = position
@@ -62,6 +65,7 @@ class Buy:
                     order = self.manage_filled_entry(orderId)
                 '''
             except Exception as ex:
+                traceback.format_exc()
                 print(colored('@ERROR@','light_red'))
                 print("     " +  str(ex))
                 print("     " +str(ex.__traceback__.tb_lineno))
@@ -94,6 +98,7 @@ class Buy:
 
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))

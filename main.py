@@ -5,6 +5,7 @@ from random import randint
 import sys
 from pprint import pprint
 import time
+import traceback
 import pandas as pd
 import csv
 
@@ -99,6 +100,7 @@ async def swap_from_usdt():
         print('Create order id:', entry_order['id'])
         return entry_order
     except Exception as e:
+        traceback.format_exc()
         print(str(e))
 
 async def swap_to_usdt():

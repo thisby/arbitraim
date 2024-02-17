@@ -1,5 +1,8 @@
 import datetime
+import os
+import sys
 import time
+import traceback
 
 from tinydb import Query
 from Buy import Buy
@@ -159,14 +162,14 @@ class Strategy():
                             self.sellmanager.trade.MODE = 0
                             last_executed_order_id = last_executed_order_orderId
 
-                    if order_executed_side == 'Buy':
+                    if executed_order_side == 'Buy':
                         self.buymanager.ordermanager.order = executed_order
                         if self.trademanager.position != None:
                             print(colored('on vérifie si on a pas déja record la transaction'))
-                            if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_order_executed_orderId:
+                            if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_executed_order_id:
                                 print(colored('on enregistre le dernier achat'))
                                 self.trademanager.position.entry_price = executed_order['execPrice']
-                                row = self.buymanager.valid_entry(last_order_executed_orderId)  
+                                row = self.buymanager.valid_entry(last_executed_order_id)  
                                 self.trademanager.trades = []
                                 self.trademanager.trades.append(row)
                                 self.trademanager.trades_persist()                                
@@ -208,7 +211,9 @@ class Strategy():
                             self.trademanager.entry_price = entry_price
                             self.trademanager.exit_price = exit_price
                             self.trademanager.quantity = quantity
-                            
+                            if exit_price == 0 or quantity == 0:
+                                print(colored('Error quantity or price cannot be null','light_red'))
+                                exit
                             self.sellmanager.sell(exit_price)
                             # self.report_filled_trade()
                             
@@ -216,10 +221,10 @@ class Strategy():
                         self.sellmanager.ordermanager.order = executed_order
                         if self.trademanager.position != None:
                             print(colored('on vérifie si on a pas déja record la transaction'))
-                            if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_order_executed_orderId:
+                            if len(self.trademanager.trades) == 0 or self.trademanager.trades[0]['orderId'] != last_executed_order_id:
                                 print(colored('on enregistre la dernière vente'))
                                 self.trademanager.position.exit_price = float(executed_order['execPrice'])
-                                row = self.sellmanager.valid_exit(last_order_executed_orderId)
+                                row = self.sellmanager.valid_exit(last_executed_order_id)
                                 self.trademanager.trades = []
                                 self.trademanager.trades.append(row)
                                 self.trademanager.trades_persist()                                
@@ -250,6 +255,10 @@ class Strategy():
 
                 except Exception as ex:
                     print(colored('@ERROR@','light_red'))
+                    traceback.format_exc()
+                    *exc_type, exc_obj, exc_tb = sys.exc_info()
+                    fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+                    print(exc_type, fname, exc_tb.tb_lineno)
                     print("     " +  str(ex))
                     print("     " +str(ex.__traceback__.tb_lineno))
                     print("     " +str(ex.__traceback__.tb_lasti))

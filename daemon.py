@@ -1,7 +1,10 @@
 import json
 import datetime
+import os
+import sys
 import threading
 import time
+import traceback
 import pandas as pd
 from pybit.unified_trading import WebSocket
 import websocket
@@ -40,8 +43,12 @@ def handle_message(ws,message):
         db.insert(message['data'][0])
 
     except Exception as ex:
+        exc_type, exc_obj, exc_tb = sys.exc_info()
+        fname = os.path.split(exc_tb.tb_frame.f_code.co_filename)[1]
+        print(exc_type, fname, exc_tb.tb_lineno)        
         print((str(ex)))
         print(str(ex.__traceback__.tb_lasti))
+        traceback.format_exc()
 
 def on_message(ws, message):
     print(message)
@@ -88,6 +95,7 @@ try:
 
 
 except Exception as e:
+    traceback.format_exc()
     print((str(e)))
     print(str(e.__traceback__.tb_lineno))
 

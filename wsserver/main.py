@@ -4,6 +4,7 @@ import datetime
 import os
 import sys
 import time
+import traceback
 from altair import CsvDataFormat
 import websockets
 import json
@@ -46,6 +47,7 @@ async def send(websocket):
             time.sleep(60)
 
     except Exception as e:
+        traceback.format_exc()
         print(str(e))
 
 async def main():
@@ -53,6 +55,7 @@ async def main():
         async with websockets.serve(send, "localhost", 8765):
             await asyncio.Future()  # run forever
     except Exception as e:
+        traceback.format_exc()
         print(str(e))
 
 def init():
@@ -62,6 +65,7 @@ def init():
         df = pd.read_csv(path,delimiter=',')
 
     except Exception as e:
+        traceback.format_exc()
         print(str(e))
 
     

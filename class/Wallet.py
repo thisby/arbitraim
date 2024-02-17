@@ -1,3 +1,4 @@
+import traceback
 from termcolor import colored
 class Wallet:
 
@@ -16,6 +17,7 @@ class Wallet:
 
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))
@@ -29,6 +31,7 @@ class Wallet:
             return float(assets['result']['balance']['transferBalance'])
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))
@@ -40,6 +43,7 @@ class Wallet:
             return balance
         except Exception as ex:
             print(colored('@ERROR@','light_red'))
+            traceback.format_exc()
             print("     " +  str(ex))
             print("     " +str(ex.__traceback__.tb_lineno))
             print("     " +str(ex.__traceback__.tb_lasti))
