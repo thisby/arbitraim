@@ -29,7 +29,7 @@ class Buy:
         self.trade.exit_price = position.exit_price
         if entry_price == 0 or quantity == 0:
             print(colored('Error quantity or price cannot be null','light_red'))
-            exit
+            exit()
         print(colored(f"    Enter position at {position.entry_price}",self.trade.getTradeLevel()))
         [status,order] = self.entry_position()
         self.trade.position = position

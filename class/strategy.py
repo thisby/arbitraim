@@ -213,7 +213,7 @@ class Strategy():
                             self.trademanager.quantity = quantity
                             if exit_price == 0 or quantity == 0:
                                 print(colored('Error quantity or price cannot be null','light_red'))
-                                exit
+                                exit()
                             self.sellmanager.sell(exit_price)
                             # self.report_filled_trade()
                             
