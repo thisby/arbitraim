@@ -73,7 +73,7 @@ arrondi des amount
 
 ISSUE 0003: Ajoute la date d'execution de l'achat
 ISSUE 0004: pas besoin de tester si prix d'entrée == prix d'ouverture de la bougie pour 
-ISSUE 0005: pas besoin de tester si prix de sortie == prix d'ouverture de la bougie pour vendre bn,klpo;Î îj,unybgt(frgbhnj,uikolm:!ùacheter
+ISSUE 0005: pas besoin de tester si prix de sortie == prix d'ouverture de la bougie pour vendre ou acheter
 ISSUE 0006: etre plus précis sur les volumes et les prix de vente ou d'achat
 ISSUE 0007: Acheter au prix fixé, pas d'ordre limite
 
@@ -87,3 +87,8 @@ achat de 1000 parts
 
         si v > 900 ==> RAS
         si v < 900 , remaining = v - 900, et part a acheter == 900
+
+
+Ameliorations stratégique:
+    Si sortie forcé, tenter d'acheter a prix le plus bas - 1pips
+    

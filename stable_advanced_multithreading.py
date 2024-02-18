@@ -52,9 +52,6 @@ done = False
 
 reference = common.reference
 
-
-
-
 s = Strategy(1000,1,15,3,reference,10,10,10,10,base,quote,session,common)
 timer = Timer()
 

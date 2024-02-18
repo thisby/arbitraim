@@ -137,11 +137,8 @@ class Strategy():
                         limit=1, 
                         orderStatus="Filled",
                     )
-                    order_executed_side = 'Buy'
-                    executed_order = {}
-                    
-
-                    
+                    executed_order_side = 'Buy'
+                    executed_order = {}                   
 
                     if len(orders['result']['list']) > 0:
                         # on teste si on a eu un ordre réussi 
@@ -152,15 +149,17 @@ class Strategy():
                         last_executed_order_orderId = executed_order['orderId']
 
                         if last_executed_order_id == 0:
+                            # on sette l'id du dernier ordre executé aussi a la première instance
                             last_executed_order_id = last_executed_order_orderId
+                            #et on positionne notre prochain ordre en mode agressif
                             self.buymanager.trade.MODE = 0
                             self.sellmanager.trade.MODE = 0
 
-                    if (last_executed_order_id != last_executed_order_orderId):
-                            #si les 2 id diffèrent, on est dans un cas ou l'on doit repartir a 0
-                            self.buymanager.trade.MODE = 0
-                            self.sellmanager.trade.MODE = 0
-                            last_executed_order_id = last_executed_order_orderId
+                        if (last_executed_order_id != last_executed_order_orderId):
+                                #si les 2 id diffèrent, on est dans un cas ou l'on doit repartir a 0
+                                self.buymanager.trade.MODE = 0
+                                self.sellmanager.trade.MODE = 0
+                                last_executed_order_id = last_executed_order_orderId
 
                     if executed_order_side == 'Buy':
                         self.buymanager.ordermanager.order = executed_order
